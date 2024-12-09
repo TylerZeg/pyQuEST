@@ -463,8 +463,8 @@ def get_gate_graphic_components(gate, column, num_qubits):
     halfcol = 0.5
     nextcol = column + 1
     midcol = column + halfcol
-    midtop = max(qubits) + halfcol
-    midbot = min(qubits) + halfcol
+    midtop = num_qubits - 1 - max(qubits) + halfcol
+    midbot = num_qubits - 1 - min(qubits) + halfcol
     padcol = column + pad
     padnextcol = nextcol - pad
 
@@ -473,14 +473,14 @@ def get_gate_graphic_components(gate, column, num_qubits):
 
     # only attempt drawing controls if any exist (else .controls throws)
     if has_controls(gate):
-        circles += [(midcol, q + halfcol) for q in gate.controls]
+        circles += [(midcol, num_qubits - 1 - q + halfcol) for q in gate.controls]
 
     # explicitly targeted gates have adjacent targets merged into rectangles
     if has_explicit_targets(gate):
 
         for group in get_grouped_consecutive_items(gate.targets):
-            x0, y0 = padcol, min(group) + pad
-            x1, y1 = padnextcol, max(group) + 1 - pad
+            x0, y0 = padcol, num_qubits - 1 - max(group) + pad
+            x1, y1 = padnextcol, num_qubits - 1 -  min(group) + 1 - pad
             rectangles.append([(x0, y0), (x0, y1), (x1, y1), (x1, y0)])
 
     # whereas untargeted gates are assumed global and act on every qubit
@@ -501,14 +501,14 @@ def draw_gate_body(gate, column, rectangles, plt, ax):
     # SWAP gates ignore rectangles and draw X at every target
     if isinstance(gate, Swap):
         for q in gate.targets:
-            plt.scatter(column + 0.5, q + 0.5, marker="x", **special_opts)
+            plt.scatter(column + 0.5, num_qubits - 1 - q + 0.5, marker="x", **special_opts)
         return
 
     # Phase gates ignore rectangles and draw circle at every target
     if isinstance(gate, Phase):
         radius = size.CONTROL_CIRCLE_RADIUS
         for q in gate.targets:
-            ax.add_patch(plt.Circle((column + 0.5, q + 0.5), radius, **special_opts))
+            ax.add_patch(plt.Circle((column + 0.5, num_qubits - 1 - q + 0.5), radius, **special_opts))
         return
 
     # ordinary styling for rest
@@ -524,7 +524,7 @@ def draw_gate_body(gate, column, rectangles, plt, ax):
         radius = size.TARGET_CIRCLE_RADIUS
         for q in gate.targets:
             # draw a circle
-            x, y = column + 0.5, q + 0.5
+            x, y = column + 0.5, num_qubits - 1 - q + 0.5
             ax.add_patch(plt.Circle((x, y), radius, linewidth=1.8, **other_opts))
             # draw the inner cross
             ax.plot([x - radius, x + radius], [y, y], color=colors.get_gate_edge_color(gate))
@@ -610,6 +610,9 @@ def draw_circuit(gates, theme="bw", filename=None):
     # determine circuit layout
     gate_columns = get_circuit_columns(gates)
     num_columns = 1 + max(gate_columns)
+
+    # num_qubits global variable
+    global num_qubits
     num_qubits = get_num_qubits(gates)
 
     # get matplotlib handles and set the canvas size
