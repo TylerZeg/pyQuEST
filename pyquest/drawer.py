@@ -450,7 +450,7 @@ def get_grouped_consecutive_items(nums):
         yield list(map(itemgetter(1), group))
 
 
-def get_gate_graphic_components(gate, column, num_qubits):
+def get_gate_graphic_components(gate, column, num_qubits, reverse_bits):
 
     # graphics consist of vertical connector lines, control circles, and gate body rectangles
     lines = []  # item = [(x0,y0), (x1,y1)]
@@ -463,8 +463,12 @@ def get_gate_graphic_components(gate, column, num_qubits):
     halfcol = 0.5
     nextcol = column + 1
     midcol = column + halfcol
-    midtop = num_qubits - 1 - max(qubits) + halfcol
-    midbot = num_qubits - 1 - min(qubits) + halfcol
+    if reverse_bits:
+        midtop = num_qubits - 1 - max(qubits) + halfcol
+        midbot = num_qubits - 1 - min(qubits) + halfcol
+    else:
+        midtop = max(qubits) + halfcol
+        midbot = min(qubits) + halfcol
     padcol = column + pad
     padnextcol = nextcol - pad
 
@@ -473,16 +477,23 @@ def get_gate_graphic_components(gate, column, num_qubits):
 
     # only attempt drawing controls if any exist (else .controls throws)
     if has_controls(gate):
-        circles += [(midcol, num_qubits - 1 - q + halfcol) for q in gate.controls]
+        if reverse_bits:
+            circles += [(midcol, num_qubits - 1 - q + halfcol) for q in gate.controls]
+        else:
+            circles += [(midcol, q + halfcol) for q in gate.controls]
 
     # explicitly targeted gates have adjacent targets merged into rectangles
     if has_explicit_targets(gate):
-
-        for group in get_grouped_consecutive_items(gate.targets):
-            x0, y0 = padcol, num_qubits - 1 - max(group) + pad
-            x1, y1 = padnextcol, num_qubits - 1 -  min(group) + 1 - pad
-            rectangles.append([(x0, y0), (x0, y1), (x1, y1), (x1, y0)])
-
+        if reverse_bits:
+            for group in get_grouped_consecutive_items(gate.targets):
+                x0, y0 = padcol, num_qubits - 1 - max(group) + pad
+                x1, y1 = padnextcol, num_qubits - 1 -  min(group) + 1 - pad
+                rectangles.append([(x0, y0), (x0, y1), (x1, y1), (x1, y0)])
+        else:
+            for group in get_grouped_consecutive_items(gate.targets):
+                x0, y0 = padcol, min(group) + pad
+                x1, y1 = padnextcol, max(group) + 1 - pad
+                rectangles.append([(x0, y0), (x0, y1), (x1, y1), (x1, y0)])
     # whereas untargeted gates are assumed global and act on every qubit
     else:
         x0, y0 = padcol, 0 + pad
@@ -493,23 +504,33 @@ def get_gate_graphic_components(gate, column, num_qubits):
     return lines, circles, rectangles
 
 
-def draw_gate_body(gate, column, rectangles, plt, ax):
+def draw_gate_body(gate, column, rectangles, plt, ax, reverse_bits):
 
     # gate-specific styling for special operators
     special_opts = {"color": colors.get_gate_face_color(gate), "zorder": layer.GATE_BODY}
 
     # SWAP gates ignore rectangles and draw X at every target
     if isinstance(gate, Swap):
-        for q in gate.targets:
-            plt.scatter(column + 0.5, num_qubits - 1 - q + 0.5, marker="x", **special_opts)
-        return
+        if reverse_bits:
+            for q in gate.targets:
+                plt.scatter(column + 0.5, num_qubits - 1 - q + 0.5, marker="x", **special_opts)
+            return
+        else:
+            for q in gate.targets:
+                plt.scatter(column + 0.5, q + 0.5, marker="x", **special_opts)
+            return
 
     # Phase gates ignore rectangles and draw circle at every target
     if isinstance(gate, Phase):
         radius = size.CONTROL_CIRCLE_RADIUS
-        for q in gate.targets:
-            ax.add_patch(plt.Circle((column + 0.5, num_qubits - 1 - q + 0.5), radius, **special_opts))
-        return
+        if reverse_bits:
+            for q in gate.targets:
+                ax.add_patch(plt.Circle((column + 0.5, num_qubits - 1 - q + 0.5), radius, **special_opts))
+            return
+        else:
+            for q in gate.targets:
+                ax.add_patch(plt.Circle((column + 0.5, q + 0.5), radius, **special_opts))
+            return
 
     # ordinary styling for rest
     other_opts = {
@@ -522,14 +543,24 @@ def draw_gate_body(gate, column, rectangles, plt, ax):
     # CX and CCX gates draw bullseyes rather than rectangles at every target
     if isinstance(gate, X) and len(gate.controls) != 0:
         radius = size.TARGET_CIRCLE_RADIUS
-        for q in gate.targets:
-            # draw a circle
-            x, y = column + 0.5, num_qubits - 1 - q + 0.5
-            ax.add_patch(plt.Circle((x, y), radius, linewidth=1.8, **other_opts))
-            # draw the inner cross
-            ax.plot([x - radius, x + radius], [y, y], color=colors.get_gate_edge_color(gate))
-            ax.plot([x, x], [y - radius, y + radius], color=colors.get_gate_edge_color(gate))
-        return
+        if reverse_bits:
+            for q in gate.targets:
+                # draw a circle
+                x, y = column + 0.5, num_qubits - 1 - q + 0.5
+                ax.add_patch(plt.Circle((x, y), radius, linewidth=1.8, **other_opts))
+                # draw the inner cross
+                ax.plot([x - radius, x + radius], [y, y], color=colors.get_gate_edge_color(gate))
+                ax.plot([x, x], [y - radius, y + radius], color=colors.get_gate_edge_color(gate))
+            return
+        else:
+            for q in gate.targets:
+                # draw a circle
+                x, y = column + 0.5, q + 0.5
+                ax.add_patch(plt.Circle((x, y), radius, linewidth=1.8, **other_opts))
+                # draw the inner cross
+                ax.plot([x - radius, x + radius], [y, y], color=colors.get_gate_edge_color(gate))
+                ax.plot([x, x], [y - radius, y + radius], color=colors.get_gate_edge_color(gate))
+            return
 
     for rect in rectangles:
         ax.add_patch(plt.Polygon(rect, **other_opts))
@@ -559,9 +590,9 @@ def draw_gate_body(gate, column, rectangles, plt, ax):
     return
 
 
-def draw_gate(gate, column, num_qubits, plt, ax):
+def draw_gate(gate, column, num_qubits, plt, ax, reverse_bits):
 
-    lines, dots, rectangles = get_gate_graphic_components(gate, column, num_qubits)
+    lines, dots, rectangles = get_gate_graphic_components(gate, column, num_qubits, reverse_bits)
 
     # draw vertical connector lines (at back)
     for line in lines:
@@ -602,11 +633,12 @@ def draw_gate(gate, column, num_qubits, plt, ax):
         )
 
     # draw the main body of the gate; possibly labelled rectangles, or bespoke symbols
-    draw_gate_body(gate, column, rectangles, plt, ax)
+    draw_gate_body(gate, column, rectangles, plt, ax, reverse_bits)
 
 
-def draw_circuit(gates, theme="bw", filename=None):
+def draw_circuit(gates, filename=None, theme="bw", reverse_bits=False):
 
+    # reversed_bits global variable
     # determine circuit layout
     gate_columns = get_circuit_columns(gates)
     num_columns = 1 + max(gate_columns)
@@ -639,7 +671,7 @@ def draw_circuit(gates, theme="bw", filename=None):
 
     # draw each gate above stave
     for gate, column in zip(gates, gate_columns):
-        draw_gate(gate, column, num_qubits, plt, ax)
+        draw_gate(gate, column, num_qubits, plt, ax, reverse_bits)
 
     # set plot range
     pad = size.PLOT_PADDING
