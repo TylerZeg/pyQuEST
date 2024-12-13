@@ -142,6 +142,10 @@ class Colors:
 
 
     def __init__(self, theme="bw"):
+
+        if theme not in ["bw", "dark", "qmt"]:
+            raise ValueError(f"Invalid theme: {theme}. Choose from 'bw', 'dark', or 'qmt'.")
+
         self.theme = theme
         self.colors = self.themes.get(theme, self.themes["bw"])
 
@@ -606,7 +610,7 @@ def draw_gate(gate, column, num_qubits, plt, ax):
     draw_gate_body(gate, column, rectangles, plt, ax)
 
 
-def draw_circuit(gates, theme="bw", filename=None, reverse_bits=False):
+def draw_circuit(gates, filename=None, theme="bw", reverse_bits=False):
 
     # determine circuit layout
     gate_columns = get_circuit_columns(gates)
